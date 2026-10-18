@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your Account · Project Virtue</title>
+<link rel="icon" href="img/favicon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="v">V</span>Project Virtue</a>
+    <nav><a href="./">Home</a><a href="./#get">Get it</a><a href="account.html" aria-current="page">Account</a></nav>
+  </div>
+</header>
+
+<main class="wrap narrow" style="display:grid;gap:24px;padding-block:24px 56px">
+  <h1 style="font-size:clamp(32px,5vw,44px)">Your account</h1>
+  <p id="flash" class="note" hidden></p>
+
+  <!-- signed out -->
+  <section class="card" id="signedOut" hidden>
+    <h2 style="font-size:24px">Sign in</h2>
+    <p style="color:var(--muted)">Use the same account in the Chrome extension and the app, so your free trial and subscription follow you.</p>
+    <div class="row"><button class="btn" id="google" type="button"><span class="g">G</span> Continue with Google</button></div>
+    <p style="color:var(--muted);font-size:15px">Or get a sign-in link by email:</p>
+    <form id="emailForm" class="inline">
+      <input type="email" id="email" autocomplete="email" placeholder="you@example.com" required>
+      <button class="btn" type="submit" id="sendBtn">Email me a link</button>
+    </form>
+    <form id="codeForm" class="inline" hidden>
+      <input type="text" id="code" placeholder="Paste the link or code from the email">
+      <button class="btn primary" type="submit">Sign in</button>
+    </form>
+    <p id="signInMsg" style="font-size:15px;color:var(--muted)"></p>
+  </section>
+
+  <!-- signed in -->
+  <section class="card" id="signedIn" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2 style="font-size:24px" id="who">Signed in</h2>
+      <button class="btn" id="signOut" type="button">Sign out</button>
+    </div>
+    <dl class="kv">
+      <dt>Plan</dt><dd id="planName">Free</dd>
+      <dt>Free trial</dt><dd id="trialText">–</dd>
+    </dl>
+    <div class="meter" id="meter" aria-hidden="true"><i style="width:0%"></i></div>
+    <p id="paywallNote" style="color:var(--muted);font-size:15px"></p>
+    <div class="row">
+      <button class="btn primary" id="subscribe" type="button" hidden>Subscribe</button>
+      <button class="btn" id="billing" type="button" hidden>Manage billing</button>
+    </div>
+    <p id="planMsg" style="font-size:15px;color:var(--muted)"></p>
+  </section>
+
+  <p style="font-size:14px;color:var(--muted)">Payments are handled by Stripe. Project Virtue never sees your card number. See the <a href="privacy.html">privacy policy</a> and <a href="terms.html">terms</a>.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Project Virtue</span>
+    <span><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></span>
+  </div>
+</footer>
+
+<script src="config.js"></script>
+<script src="db.js"></script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var store = {
+    get: async function (k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
+    set: async function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  var db = VirtueDB.create(window.VIRTUE_CONFIG, store);
+  var here = location.origin + location.pathname;
+
+  function flash(text, warn) {
+    var el = $("flash");
+    el.hidden = !text; el.textContent = text || "";
+    el.className = warn ? "warnbox" : "note";
+  }
+
+  function hours(sec) { return (Math.round(sec / 360) / 10).toString(); }
+
+  async function render() {
+    var a = await db.account().catch(function () { return { configured: db.configured, signedIn: false }; });
+    $("signedOut").hidden = a.signedIn;
+    $("signedIn").hidden = !a.signedIn;
+    if (!a.signedIn) return;
+    $("who").textContent = a.email;
+    var plan = await db.myPlan().catch(function () { return null; });
+    if (!plan) { $("planMsg").textContent = "Couldn't load your plan. Try again in a moment."; return; }
+    var used = plan.trial_seconds_used || 0, total = plan.trial_seconds_total || 36000;
+    $("planName").textContent = plan.subscribed ? "Virtue Plus" + (plan.plan_status && plan.plan_status !== "active" ? " (" + plan.plan_status.replace("_", " ") + ")" : "") : "Free";
+    $("trialText").textContent = hours(Math.min(used, total)) + " of " + hours(total) + " hours used";
+    $("meter").firstElementChild.style.width = Math.min(100, used / total * 100).toFixed(1) + "%";
+    $("paywallNote").textContent = !plan.paywall_enabled ? "Project Virtue is free for everyone while it's in testing. Your trial hours aren't being used up yet."
+      : plan.subscribed ? (plan.plan_renews_at ? "Renews " + new Date(plan.plan_renews_at).toLocaleDateString() + "." : "")
+      : plan.allowed ? "When your free hours run out, subscribe to keep filtering." : "Your free trial is used up. Subscribe to keep filtering.";
+    $("subscribe").hidden = plan.subscribed || !plan.paywall_enabled;
+    $("billing").hidden = !plan.has_billing;
+  }
+
+  async function finishRedirectSignIn() {
+    // Back from Google or an emailed link: the address carries #access_token=... (or an error).
+    if (!/access_token=|error_description=/.test(location.hash) && !/[?&]token=/.test(location.search)) return;
+    try { await db.verifyCode("", location.href); flash("You're signed in."); }
+    catch (e) { flash(e.message, true); }
+    history.replaceState(null, "", location.pathname);
+  }
+
+  $("google").addEventListener("click", function () { location.href = db.oauthUrl("google", here); });
+  $("emailForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    $("sendBtn").disabled = true; $("signInMsg").textContent = "Sending…";
+    try {
+      await db.sendCode($("email").value, here);
+      $("signInMsg").textContent = "Check your email and click the sign-in link. It brings you back here. (If the email has a code, paste it below.)";
+      $("codeForm").hidden = false;
+    } catch (err) { $("signInMsg").textContent = err.message; }
+    $("sendBtn").disabled = false;
+  });
+  $("codeForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    try { await db.verifyCode($("email").value, $("code").value); $("signInMsg").textContent = ""; render(); }
+    catch (err) { $("signInMsg").textContent = err.message; }
+  });
+  $("signOut").addEventListener("click", async function () { await db.signOut(); flash(""); render(); });
+
+  async function go(op) {
+    $("planMsg").textContent = "Opening secure checkout…";
+    try {
+      var r = await db[op](here);
+      if (r && r.url) location.href = r.url; else $("planMsg").textContent = "Payments aren't set up yet.";
+    } catch (e) { $("planMsg").textContent = /not found|404|aren't set up/i.test(e.message) ? "Payments aren't set up yet." : e.message; }
+  }
+  $("subscribe").addEventListener("click", function () { go("checkout"); });
+  $("billing").addEventListener("click", function () { go("billingPortal"); });
+
+  (async function () {
+    if (!db.configured) { flash("This site isn't connected to the database yet.", true); return; }
+    await finishRedirectSignIn();
+    var q = new URLSearchParams(location.search);
+    if (q.get("checkout") === "success") { flash("Thank you! Your subscription is active. It can take a minute to show here."); history.replaceState(null, "", location.pathname); setTimeout(render, 4000); }
+    if (q.get("checkout") === "cancelled") { flash("Checkout was cancelled. You haven't been charged."); history.replaceState(null, "", location.pathname); }
+    render();
+  })();
+})();
+</script>
+</body>
+</html>
