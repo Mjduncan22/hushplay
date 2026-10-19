@@ -169,9 +169,10 @@
           "&redirect_to=" + encodeURIComponent(redirectTo);
       },
       // Billing (Supabase Edge Functions): returns { url } to open.
-      checkout: async function (returnUrl) {
+      // plan: "monthly" (default) or "yearly"
+      checkout: async function (returnUrl, plan) {
         need();
-        return http("/functions/v1/create-checkout", { return_url: returnUrl }, await accessToken());
+        return http("/functions/v1/create-checkout", { return_url: returnUrl, plan: plan === "yearly" ? "yearly" : "monthly" }, await accessToken());
       },
       billingPortal: async function (returnUrl) {
         need();
@@ -181,6 +182,14 @@
         return rpc("submit_segments", { p_service: service, p_service_id: String(serviceId),
           p_title: title || {}, p_segments: segments || [] });
       },
+      // Filter profiles (only yours; you must be signed in)
+      profiles: function () { return rpc("my_profiles", {}); },
+      // id null = new profile. name / settings null = keep. makeDefault: true to make it the default.
+      saveProfile: function (id, name, settings, makeDefault) {
+        return rpc("save_profile", { p_id: id || null, p_name: name == null ? null : String(name),
+          p_settings: settings == null ? null : settings, p_default: makeDefault ? true : null });
+      },
+      deleteProfile: function (id) { return rpc("delete_profile", { p_id: id }); },
       pending: function (limit) { return rpc("pending_segments", { p_limit: limit || 200 }); },
       review: function (ids, status) { return rpc("review_segments", { p_ids: ids, p_status: status }); },
       vote: function (id, v) { return rpc("vote_segment", { p_id: id, p_vote: v }); }

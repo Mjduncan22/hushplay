@@ -50,10 +50,29 @@
     <div class="meter" id="meter" aria-hidden="true"><i style="width:0%"></i></div>
     <p id="paywallNote" style="color:var(--muted);font-size:15px"></p>
     <div class="row">
-      <button class="btn primary" id="subscribe" type="button" hidden>Subscribe</button>
+      <button class="btn primary" id="subscribeYearly" type="button" hidden>Subscribe yearly</button>
+      <button class="btn" id="subscribe" type="button" hidden>Subscribe monthly</button>
       <button class="btn" id="billing" type="button" hidden>Manage billing</button>
     </div>
     <p id="planMsg" style="font-size:15px;color:var(--muted)"></p>
+  </section>
+
+  <!-- settings profiles -->
+  <section class="card" id="profilesCard" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2 style="font-size:24px">Settings profiles</h2>
+      <button class="btn" id="profNew" type="button">New profile</button>
+    </div>
+    <p style="color:var(--muted);font-size:15px;margin:0">Save different settings for different people or times, like "Kids" and "Movie night".
+      In the Chrome extension and the app, each device picks which profile it uses, so they can share one or each have their own.
+      New devices start with your default profile.</p>
+    <form id="profNewForm" class="inline" hidden>
+      <input type="text" id="profNewName" maxlength="40" placeholder="Profile name, e.g. Kids" required>
+      <button class="btn primary" type="submit">Create</button>
+      <button class="btn" type="button" id="profNewCancel">Cancel</button>
+    </form>
+    <ul id="profList" class="proflist"></ul>
+    <p id="profMsg" style="font-size:15px;color:var(--muted);margin:0"></p>
   </section>
 
   <p style="font-size:14px;color:var(--muted)">Payments are handled by Stripe. Project Virtue never sees your card number. See the <a href="privacy.html">privacy policy</a> and <a href="terms.html">terms</a>.</p>
@@ -91,20 +110,140 @@
     var a = await db.account().catch(function () { return { configured: db.configured, signedIn: false }; });
     $("signedOut").hidden = a.signedIn;
     $("signedIn").hidden = !a.signedIn;
-    if (!a.signedIn) return;
+    if (!a.signedIn) { $("profilesCard").hidden = true; return; }
     $("who").textContent = a.email;
     var plan = await db.myPlan().catch(function () { return null; });
     if (!plan) { $("planMsg").textContent = "Couldn't load your plan. Try again in a moment."; return; }
-    var used = plan.trial_seconds_used || 0, total = plan.trial_seconds_total || 36000;
+    var used = plan.trial_seconds_used || 0, total = plan.trial_seconds_total || 7200;
     $("planName").textContent = plan.subscribed ? "Virtue Plus" + (plan.plan_status && plan.plan_status !== "active" ? " (" + plan.plan_status.replace("_", " ") + ")" : "") : "Free";
     $("trialText").textContent = hours(Math.min(used, total)) + " of " + hours(total) + " hours used";
     $("meter").firstElementChild.style.width = Math.min(100, used / total * 100).toFixed(1) + "%";
     $("paywallNote").textContent = !plan.paywall_enabled ? "Project Virtue is free for everyone while it's in testing. Your trial hours aren't being used up yet."
       : plan.subscribed ? (plan.plan_renews_at ? "Renews " + new Date(plan.plan_renews_at).toLocaleDateString() + "." : "")
       : plan.allowed ? "When your free hours run out, subscribe to keep filtering." : "Your free trial is used up. Subscribe to keep filtering.";
-    $("subscribe").hidden = plan.subscribed || !plan.paywall_enabled;
+    $("subscribe").hidden = $("subscribeYearly").hidden = plan.subscribed || !plan.paywall_enabled;
     $("billing").hidden = !plan.has_billing;
+    loadProfiles();
+    var cfg = await db.config().catch(function () { return {}; });
+    $("subscribe").textContent = "Monthly" + (cfg.price_monthly ? " · " + cfg.price_monthly + "/month" : "");
+    $("subscribeYearly").textContent = "Yearly" + (cfg.price_yearly ? " · " + cfg.price_yearly + "/year" : "");
   }
+
+  // ---------------------------------------------------------------- settings profiles
+  var MUTE = [["strong", "Strong swearing"], ["mild", "Mild words"], ["blasphemy", "God's name in vain"], ["slurs", "Slurs"]];
+  var SKIP = [["nudity", "Nudity"], ["sexual", "Sexual content"], ["violence", "Violence"], ["other", "Other flagged scenes"]];
+  var DEF_CATS = { strong: true, mild: true, blasphemy: true, slurs: true, nudity: true, sexual: true, violence: false, other: true };
+  var profs = [], openId = null;
+  function profMsg(t, warn) { $("profMsg").textContent = t || ""; $("profMsg").style.color = warn ? "var(--warn)" : "var(--muted)"; }
+  async function loadProfiles(msg) {
+    try { profs = await db.profiles(); } catch (e) { profMsg(e.message, true); return; }
+    $("profilesCard").hidden = false;
+    drawProfiles();
+    profMsg(msg || (profs.length ? "" : "You don't have any profiles yet. Open the extension or the app once while signed in, or make one here."));
+  }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) { if (k === "text") n.textContent = attrs[k]; else n.setAttribute(k, attrs[k]); });
+    (kids || []).forEach(function (k) { if (k) n.appendChild(k); });
+    return n;
+  }
+  function check(id, label, on) {
+    var box = el("input", { type: "checkbox", id: id });
+    box.checked = !!on;
+    return el("label", { class: "check" }, [box, document.createTextNode(" " + label)]);
+  }
+  function select(id, opts, value) {
+    var s = el("select", { id: id });
+    opts.forEach(function (o) { var op = el("option", { value: o[0], text: o[1] }); s.appendChild(op); });
+    s.value = String(value);
+    return s;
+  }
+  function drawProfiles() {
+    var list = $("profList");
+    list.innerHTML = "";
+    profs.forEach(function (p) {
+      var li = el("li", { class: "prof" });
+      var head = el("div", { class: "row", style: "justify-content:space-between" }, [
+        el("strong", { text: p.name }),
+        p.is_default ? el("span", { class: "pill", text: "Default" }) : null
+      ]);
+      var btns = el("div", { class: "row" });
+      var edit = el("button", { class: "btn small", type: "button", text: openId === p.id ? "Close" : "Edit" });
+      edit.addEventListener("click", function () { openId = openId === p.id ? null : p.id; drawProfiles(); });
+      btns.appendChild(edit);
+      if (!p.is_default) {
+        var def = el("button", { class: "btn small", type: "button", text: "Make default" });
+        def.addEventListener("click", function () { save(p.id, null, null, true, "\"" + p.name + "\" is now the default for new devices."); });
+        btns.appendChild(def);
+      }
+      var del = el("button", { class: "btn small", type: "button", text: "Delete" });
+      del.addEventListener("click", function () {
+        if (del.dataset.sure) {
+          db.deleteProfile(p.id).then(function () { loadProfiles("Deleted \"" + p.name + "\". Devices that used it keep their settings."); },
+            function (e) { profMsg(e.message, true); });
+        } else { del.dataset.sure = "1"; del.textContent = "Really delete?"; }
+      });
+      btns.appendChild(del);
+      li.appendChild(head);
+      li.appendChild(btns);
+      if (openId === p.id) li.appendChild(editor(p));
+      list.appendChild(li);
+    });
+  }
+  function editor(p) {
+    var s = p.settings || {}, cats = Object.assign({}, DEF_CATS, s.categories || {});
+    var f = el("form", { class: "profedit" });
+    var name = el("input", { type: "text", id: "pe-name", maxlength: "40", value: p.name });
+    f.appendChild(el("label", { class: "field" }, [document.createTextNode("Name"), name]));
+    f.appendChild(el("p", { class: "lbl", text: "Mute" }));
+    MUTE.forEach(function (c) { f.appendChild(check("pe-" + c[0], c[1], cats[c[0]])); });
+    f.appendChild(el("p", { class: "lbl", text: "Skip scenes (movies & TV)" }));
+    SKIP.forEach(function (c) { f.appendChild(check("pe-" + c[0], c[1], cats[c[0]])); });
+    f.appendChild(el("label", { class: "field" }, [document.createTextNode("Skip violence that is"),
+      select("pe-violenceLevel", [["1", "Any (fights and up)"], ["2", "Moderate and up (shooting, blood)"], ["3", "Graphic only (gore)"]], s.violenceLevel || 2)]));
+    f.appendChild(el("label", { class: "field" }, [document.createTextNode("Scenes spotted from sound cues in subtitles"),
+      select("pe-soundCues", [["ask", "Offer a Skip button"], ["auto", "Skip them automatically"], ["off", "Ignore them"]], s.soundCues || "ask")]));
+    f.appendChild(el("label", { class: "field" }, [document.createTextNode("Also mute (comma-separated)"),
+      el("input", { type: "text", id: "pe-custom", value: s.custom || "", placeholder: "e.g. heck, gosh, darn*" })]));
+    f.appendChild(el("label", { class: "field" }, [document.createTextNode("Never mute"),
+      el("input", { type: "text", id: "pe-allow", value: s.allow || "", placeholder: "e.g. hell" })]));
+    f.appendChild(check("pe-useUnverified", "Use shared timestamps that aren't verified yet", s.useUnverified !== false));
+    f.appendChild(check("pe-censorCaptions", "Hide swear words in on-screen captions", s.censorCaptions !== false));
+    var go = el("button", { class: "btn primary", type: "submit", text: "Save changes" });
+    f.appendChild(el("div", { class: "row" }, [go]));
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var next = Object.assign({}, s, { categories: Object.assign({}, cats) });
+      MUTE.concat(SKIP).forEach(function (c) { next.categories[c[0]] = $("pe-" + c[0]).checked; });
+      next.violenceLevel = +$("pe-violenceLevel").value;
+      next.soundCues = $("pe-soundCues").value;
+      next.custom = $("pe-custom").value.trim();
+      next.allow = $("pe-allow").value.trim();
+      next.useUnverified = $("pe-useUnverified").checked;
+      next.censorCaptions = $("pe-censorCaptions").checked;
+      var newName = name.value.trim();
+      save(p.id, newName && newName !== p.name ? newName : null, next, false, "Saved. Devices using \"" + (newName || p.name) + "\" pick this up within a few minutes.");
+    });
+    return f;
+  }
+  function save(id, name, settings, makeDefault, done) {
+    profMsg("Saving…");
+    db.saveProfile(id, name, settings, makeDefault).then(function () { return loadProfiles(done); },
+      function (e) { profMsg(e.message, true); });
+  }
+  $("profNew").addEventListener("click", function () { $("profNewForm").hidden = false; $("profNewName").value = ""; $("profNewName").focus(); });
+  $("profNewCancel").addEventListener("click", function () { $("profNewForm").hidden = true; });
+  $("profNewForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var n = $("profNewName").value.trim();
+    if (!n) return;
+    $("profNewForm").hidden = true;
+    profMsg("Saving…");
+    // New profiles here start from the standard settings.
+    db.saveProfile(null, n, { categories: Object.assign({}, DEF_CATS) }, false).then(function (p) {
+      openId = p.id; return loadProfiles("Made \"" + n + "\". Change its settings below, then pick it on a device.");
+    }, function (e) { profMsg(e.message, true); });
+  });
 
   async function finishRedirectSignIn() {
     // Back from Google or an emailed link: the address carries #access_token=... (or an error).
@@ -132,14 +271,15 @@
   });
   $("signOut").addEventListener("click", async function () { await db.signOut(); flash(""); render(); });
 
-  async function go(op) {
+  async function go(op, plan) {
     $("planMsg").textContent = "Opening secure checkout…";
     try {
-      var r = await db[op](here);
+      var r = await db[op](here, plan);
       if (r && r.url) location.href = r.url; else $("planMsg").textContent = "Payments aren't set up yet.";
     } catch (e) { $("planMsg").textContent = /not found|404|aren't set up/i.test(e.message) ? "Payments aren't set up yet." : e.message; }
   }
-  $("subscribe").addEventListener("click", function () { go("checkout"); });
+  $("subscribe").addEventListener("click", function () { go("checkout", "monthly"); });
+  $("subscribeYearly").addEventListener("click", function () { go("checkout", "yearly"); });
   $("billing").addEventListener("click", function () { go("billingPortal"); });
 
   (async function () {
