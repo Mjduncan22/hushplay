@@ -1,7 +1,7 @@
 [hidden] { display: none !important; }
-/* Project Virtue website.
+/* HushPlay website.
    Layout: one centred reading column (≈64rem) with full-width bands; the hero shows a
-   film timeline with mute marks and skipped scenes, the thing Virtue actually produces. */
+   film timeline with mute marks and skipped scenes, the thing HushPlay actually produces. */
 :root {
   --bg: #f6f4ef;
   --paper: #ffffff;

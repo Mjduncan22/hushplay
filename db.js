@@ -1,5 +1,5 @@
 /*
- * Project Virtue - database client (Supabase REST, no SDK needed)
+ * HushPlay - database client (Supabase REST, no SDK needed)
  *
  *   var db = VirtueDB.create({ supabaseUrl, supabaseKey }, storage)
  *   storage = { get(key) -> Promise<value>, set(key, value) -> Promise }

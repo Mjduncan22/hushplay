@@ -1,5 +1,5 @@
 /*
- * Project Virtue - database connection (Supabase project "project-virtue").
+ * HushPlay - database connection (Supabase project "project-virtue").
  * The publishable key is designed to be public: the database rules decide
  * who can read, submit and approve. Never put a secret / service_role key here.
  */

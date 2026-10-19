@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Your Account · Project Virtue</title>
+<title>Your Account · HushPlay</title>
 <link rel="icon" href="img/favicon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
 <link rel="stylesheet" href="site.css">
@@ -11,7 +11,7 @@
 <body>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="./"><span class="v">V</span>Project Virtue</a>
+    <a class="brand" href="./"><span class="v">H</span>HushPlay</a>
     <nav><a href="./">Home</a><a href="./#get">Get it</a><a href="account.html" aria-current="page">Account</a></nav>
   </div>
 </header>
@@ -96,12 +96,12 @@
     <p id="profMsg" style="font-size:15px;color:var(--muted);margin:0"></p>
   </section>
 
-  <p style="font-size:14px;color:var(--muted)">Payments are handled by Stripe. Project Virtue never sees your card number. See the <a href="privacy.html">privacy policy</a> and <a href="terms.html">terms</a>.</p>
+  <p style="font-size:14px;color:var(--muted)">Payments are handled by Stripe. HushPlay never sees your card number. See the <a href="privacy.html">privacy policy</a> and <a href="terms.html">terms</a>.</p>
 </main>
 
 <footer>
   <div class="wrap">
-    <span>© 2026 Project Virtue</span>
+    <span>© 2026 HushPlay</span>
     <span><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></span>
   </div>
 </footer>
@@ -136,12 +136,12 @@
     var plan = await db.myPlan().catch(function () { return null; });
     if (!plan) { $("planMsg").textContent = "Couldn't load your plan. Try again in a moment."; return; }
     var used = plan.trial_seconds_used || 0, total = plan.trial_seconds_total || 7200;
-    $("planName").textContent = plan.subscribed ? "Virtue Plus" + (plan.plan_status && plan.plan_status !== "active" ? " (" + plan.plan_status.replace("_", " ") + ")" : "") : "Free";
+    $("planName").textContent = plan.subscribed ? "HushPlay Plus" + (plan.plan_status && plan.plan_status !== "active" ? " (" + plan.plan_status.replace("_", " ") + ")" : "") : "Free";
     $("trialText").textContent = hours(Math.min(used, total)) + " of " + hours(total) + " hours used";
     $("meter").firstElementChild.style.width = Math.min(100, used / total * 100).toFixed(1) + "%";
     // Subscribers don't have a free trial any more: no meter, no hours.
     $("trialLabel").hidden = $("trialText").hidden = $("meter").hidden = !!plan.subscribed;
-    $("paywallNote").textContent = !plan.paywall_enabled ? "Project Virtue is free for everyone while it's in testing. Your trial hours aren't being used up yet."
+    $("paywallNote").textContent = !plan.paywall_enabled ? "HushPlay is free for everyone while it's in testing. Your trial hours aren't being used up yet."
       : plan.subscribed ? (plan.plan_renews_at ? "Renews " + new Date(plan.plan_renews_at).toLocaleDateString() + "." : "")
       : plan.allowed ? "When your free hours run out, subscribe to keep filtering." : "Your free trial is used up. Subscribe to keep filtering.";
     $("subscribe").hidden = $("subscribeYearly").hidden = plan.subscribed || !plan.paywall_enabled;
