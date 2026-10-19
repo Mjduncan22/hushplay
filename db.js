@@ -170,9 +170,11 @@
       },
       // Billing (Supabase Edge Functions): returns { url } to open.
       // plan: "monthly" (default) or "yearly"
-      checkout: async function (returnUrl, plan) {
+      checkout: async function (returnUrl, plan, referralCode) {
         need();
-        return http("/functions/v1/create-checkout", { return_url: returnUrl, plan: plan === "yearly" ? "yearly" : "monthly" }, await accessToken());
+        var body = { return_url: returnUrl, plan: plan === "yearly" ? "yearly" : "monthly" };
+        if (referralCode) body.referral_code = String(referralCode).trim().toUpperCase();
+        return http("/functions/v1/create-checkout", body, await accessToken());
       },
       billingPortal: async function (returnUrl) {
         need();
@@ -190,6 +192,9 @@
           p_settings: settings == null ? null : settings, p_default: makeDefault ? true : null });
       },
       deleteProfile: function (id) { return rpc("delete_profile", { p_id: id }); },
+      // Referrals: your code and totals; whether a code can be used on your first subscription
+      myReferral: function () { return rpc("my_referral", {}); },
+      checkReferral: function (code) { return rpc("check_referral_code", { p_code: String(code || "").trim().toUpperCase() }); },
       pending: function (limit) { return rpc("pending_segments", { p_limit: limit || 200 }); },
       review: function (ids, status) { return rpc("review_segments", { p_ids: ids, p_status: status }); },
       vote: function (id, v) { return rpc("vote_segment", { p_id: id, p_vote: v }); }

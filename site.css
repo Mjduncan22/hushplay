@@ -156,3 +156,8 @@ footer a { color: var(--muted); }
 .profedit .field { display: grid; gap: 4px; font-size: 15px; color: var(--muted); }
 .profedit input[type=text], .profedit select { font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); max-width: 100%; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+
+/* referrals */
+.refcode { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.refcode span { color: var(--muted); font-size: 15px; }
+.refcode b { font: 700 26px/1.1 var(--mono); letter-spacing: .12em; }

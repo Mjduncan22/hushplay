@@ -49,12 +49,33 @@
     </dl>
     <div class="meter" id="meter" aria-hidden="true"><i style="width:0%"></i></div>
     <p id="paywallNote" style="color:var(--muted);font-size:15px"></p>
+    <div id="refEntry" hidden>
+      <label class="field">Referral code (optional)
+        <input type="text" id="refCode" maxlength="12" autocomplete="off" placeholder="e.g. 7KQ2MX4D" style="text-transform:uppercase">
+      </label>
+    </div>
     <div class="row">
       <button class="btn primary" id="subscribeYearly" type="button" hidden>Subscribe yearly</button>
       <button class="btn" id="subscribe" type="button" hidden>Subscribe monthly</button>
       <button class="btn" id="billing" type="button" hidden>Manage billing</button>
     </div>
     <p id="planMsg" style="font-size:15px;color:var(--muted)"></p>
+  </section>
+
+  <!-- referrals -->
+  <section class="card" id="referCard" hidden>
+    <h2 style="font-size:24px">Refer friends</h2>
+    <p style="color:var(--muted);font-size:15px;margin:0" id="referHow"></p>
+    <div class="refcode"><span>Your code</span><b id="myCode">–</b></div>
+    <div class="inline">
+      <input type="text" id="myLink" readonly aria-label="Your referral link">
+      <button class="btn" type="button" id="copyLink">Copy link</button>
+    </div>
+    <dl class="kv">
+      <dt>Friends signed up</dt><dd id="refJoined">0</dd>
+      <dt>Rewards earned</dt><dd id="refEarned">$0.00</dd>
+    </dl>
+    <p id="refMsg" style="font-size:15px;color:var(--muted);margin:0"></p>
   </section>
 
   <!-- settings profiles -->
@@ -110,7 +131,7 @@
     var a = await db.account().catch(function () { return { configured: db.configured, signedIn: false }; });
     $("signedOut").hidden = a.signedIn;
     $("signedIn").hidden = !a.signedIn;
-    if (!a.signedIn) { $("profilesCard").hidden = true; return; }
+    if (!a.signedIn) { $("profilesCard").hidden = true; $("referCard").hidden = true; return; }
     $("who").textContent = a.email;
     var plan = await db.myPlan().catch(function () { return null; });
     if (!plan) { $("planMsg").textContent = "Couldn't load your plan. Try again in a moment."; return; }
@@ -123,7 +144,9 @@
       : plan.allowed ? "When your free hours run out, subscribe to keep filtering." : "Your free trial is used up. Subscribe to keep filtering.";
     $("subscribe").hidden = $("subscribeYearly").hidden = plan.subscribed || !plan.paywall_enabled;
     $("billing").hidden = !plan.has_billing;
+    $("refEntry").hidden = plan.subscribed || !plan.paywall_enabled || !!plan.plan_status;
     loadProfiles();
+    loadReferral();
     var cfg = await db.config().catch(function () { return {}; });
     $("subscribe").textContent = "Monthly" + (cfg.price_monthly ? " · " + cfg.price_monthly + "/month" : "");
     $("subscribeYearly").textContent = "Yearly" + (cfg.price_yearly ? " · " + cfg.price_yearly + "/year" : "");
@@ -245,6 +268,30 @@
     }, function (e) { profMsg(e.message, true); });
   });
 
+  // ---------------------------------------------------------------- referrals
+  var REF_KEY = "virtue.ref";
+  function money(c) { return "$" + (c / 100).toFixed(2); }
+  function savedRef() { try { return localStorage.getItem(REF_KEY) || ""; } catch (e) { return ""; } }
+  function rememberRef(c) { try { if (c) localStorage.setItem(REF_KEY, c); else localStorage.removeItem(REF_KEY); } catch (e) {} }
+  async function loadReferral() {
+    var r;
+    try { r = await db.myReferral(); } catch (e) { return; }
+    $("referCard").hidden = false;
+    $("referHow").textContent = "Share your code. When a friend buys their first subscription with it, you get " +
+      money(r.reward_yearly_cents) + " off your bills if they choose yearly, or " + money(r.reward_monthly_cents) +
+      " if they choose monthly. Each friend can use one code, once.";
+    $("myCode").textContent = r.code;
+    $("myLink").value = location.origin + location.pathname + "?ref=" + r.code;
+    $("refJoined").textContent = String(r.joined + r.rewarded);
+    $("refEarned").textContent = money(r.credit_cents) + (r.waiting_cents ? " (" + money(r.waiting_cents) + " is added when you subscribe)" : "");
+    if (r.was_referred) { $("refEntry").hidden = true; rememberRef(""); }
+    else if (!$("refCode").value) $("refCode").value = savedRef();
+  }
+  $("copyLink").addEventListener("click", async function () {
+    try { await navigator.clipboard.writeText($("myLink").value); $("refMsg").textContent = "Link copied."; }
+    catch (e) { $("myLink").select(); $("refMsg").textContent = "Press Ctrl+C (or Cmd+C) to copy."; }
+  });
+
   async function finishRedirectSignIn() {
     // Back from Google or an emailed link: the address carries #access_token=... (or an error).
     if (!/access_token=|error_description=/.test(location.hash) && !/[?&]token=/.test(location.search)) return;
@@ -272,9 +319,14 @@
   $("signOut").addEventListener("click", async function () { await db.signOut(); flash(""); render(); });
 
   async function go(op, plan) {
+    var code = op === "checkout" && !$("refEntry").hidden ? $("refCode").value.trim().toUpperCase() : "";
+    if (code) {
+      var ok = await db.checkReferral(code).catch(function (e) { return { ok: false, reason: e.message }; });
+      if (!ok.ok) { $("planMsg").textContent = ok.reason + " Clear the referral code box to subscribe without one."; return; }
+    }
     $("planMsg").textContent = "Opening secure checkout…";
     try {
-      var r = await db[op](here, plan);
+      var r = await db[op](here, plan, code || undefined);
       if (r && r.url) location.href = r.url; else $("planMsg").textContent = "Payments aren't set up yet.";
     } catch (e) { $("planMsg").textContent = /not found|404|aren't set up/i.test(e.message) ? "Payments aren't set up yet." : e.message; }
   }
@@ -286,7 +338,13 @@
     if (!db.configured) { flash("This site isn't connected to the database yet.", true); return; }
     await finishRedirectSignIn();
     var q = new URLSearchParams(location.search);
-    if (q.get("checkout") === "success") { flash("Thank you! Your subscription is active. It can take a minute to show here."); history.replaceState(null, "", location.pathname); setTimeout(render, 4000); }
+    if (q.get("ref")) {
+      var c = q.get("ref").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+      rememberRef(c);
+      flash("Referral code " + c + " saved. It's used when you subscribe.");
+      history.replaceState(null, "", location.pathname);
+    }
+    if (q.get("checkout") === "success") { rememberRef(""); flash("Thank you! Your subscription is active. It can take a minute to show here."); history.replaceState(null, "", location.pathname); setTimeout(render, 4000); }
     if (q.get("checkout") === "cancelled") { flash("Checkout was cancelled. You haven't been charged."); history.replaceState(null, "", location.pathname); }
     render();
   })();
