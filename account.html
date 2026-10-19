@@ -45,7 +45,7 @@
     </div>
     <dl class="kv">
       <dt>Plan</dt><dd id="planName">Free</dd>
-      <dt>Free trial</dt><dd id="trialText">–</dd>
+      <dt id="trialLabel">Free trial</dt><dd id="trialText">–</dd>
     </dl>
     <div class="meter" id="meter" aria-hidden="true"><i style="width:0%"></i></div>
     <p id="paywallNote" style="color:var(--muted);font-size:15px"></p>
@@ -139,6 +139,8 @@
     $("planName").textContent = plan.subscribed ? "Virtue Plus" + (plan.plan_status && plan.plan_status !== "active" ? " (" + plan.plan_status.replace("_", " ") + ")" : "") : "Free";
     $("trialText").textContent = hours(Math.min(used, total)) + " of " + hours(total) + " hours used";
     $("meter").firstElementChild.style.width = Math.min(100, used / total * 100).toFixed(1) + "%";
+    // Subscribers don't have a free trial any more: no meter, no hours.
+    $("trialLabel").hidden = $("trialText").hidden = $("meter").hidden = !!plan.subscribed;
     $("paywallNote").textContent = !plan.paywall_enabled ? "Project Virtue is free for everyone while it's in testing. Your trial hours aren't being used up yet."
       : plan.subscribed ? (plan.plan_renews_at ? "Renews " + new Date(plan.plan_renews_at).toLocaleDateString() + "." : "")
       : plan.allowed ? "When your free hours run out, subscribe to keep filtering." : "Your free trial is used up. Subscribe to keep filtering.";
