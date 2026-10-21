@@ -35,6 +35,7 @@
     <thead><tr><th>When</th><th>What is sent</th><th>Linked to you?</th></tr></thead>
     <tbody>
       <tr><td>You open a video or title (if "Use the shared database" is on)</td><td>The service and the video or title ID, to look up its timestamps</td><td>No. Lookups don't include your account. Like any web request, the server sees your IP address.</td></tr>
+      <tr><td>On Android, you watch something in a streaming app (if "Filter streaming apps" and "Use the shared database" are on)</td><td>The service, and the show's name and season/episode as that app reports them, to look up its timestamps. The subtitles HushPlay reads on screen never leave your phone.</td><td>No. Lookups don't include your account. Like any web request, the server sees your IP address.</td></tr>
       <tr><td>You sign in with email</td><td>Your email address</td><td>Yes, it's your account</td></tr>
       <tr><td>You sign in with Google</td><td>Google tells us your email address and name (and profile picture, which we don't use)</td><td>Yes, it's your account</td></tr>
       <tr><td>You watch while signed in</td><td>How many seconds you've watched with filtering on, to count your free-trial hours. Not what you watched.</td><td>Yes</td></tr>
